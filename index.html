@@ -233,6 +233,8 @@ function buildMCQOptions(correctText, distractorTexts){
    ============================================= */
 function applyMathTransforms(s) {
   const SF = (n,d) => `<span class="frac"><span class="num">${n}</span><span class="den">${d}</span></span>`;
+  // √((num)/den)
+  s = s.replace(/√\(\(([^()]+)\)\/([^()]+)\)/g, (_,n,d) => `√${SF(n,d)}`);
   // √(num/den)
   s = s.replace(/√\(([^)]+)\/([^)]+)\)/g, (_,n,d) => `√${SF(n,d)}`);
   // ∛(num/den)
@@ -462,7 +464,7 @@ function buildFractionCoeff(pool, prefix, skill, diff, sign){
   const [L, R] = choice(pool);
   const N = choice([1,1,2,3]);
   const D = choice([2,3,4,5]);
-  if(N === D) return buildFractionCoeff(pool, prefix, skill, diff, sign);
+  if(gcd(N, D) !== 1) return buildFractionCoeff(pool, prefix, skill, diff, sign);
   const B = randInt(2,12);
   const opSign  = sign === 'plus' ? '+' : '−';
   const invSign = sign === 'plus' ? '−' : '+';
@@ -475,7 +477,7 @@ function buildFractionCoeff(pool, prefix, skill, diff, sign){
     `${R} = (${L} ${opSign} ${B}) / ${D}`,
     `${R} = ${D}${L} ${invSign} ${B}`,
     `${R} = (${L} ${opSign} ${B}) × ${D}`,
-    N === 1 ? `${R} = ${D}(${L} ${opSign} ${B})` : `${R} = ${D}(${L} ${opSign} ${B}) / ${N}`
+    N === 1 ? `${R} = ${D}${L} ${opSign} ${B}` : `${R} = ${D}(${L} ${opSign} ${B}) / ${N}`
   ];
   const mcq = buildMCQOptions(correct, shuffleArray(w).slice(0,3));
   if(!mcq) return buildFractionCoeff(pool, prefix, skill, diff, sign);
@@ -486,7 +488,7 @@ function buildFractionCoeff(pool, prefix, skill, diff, sign){
     options: mcq.options, correctIndex: mcq.correctIndex,
     solution: [
       `${invVerb} ${B} ${invPrep} both sides: ${L} ${invSign} ${B} = ${N}/${D} ${R}`,
-      `Multiply both sides by ${D}: ${D}(${L} ${invSign} ${B}) = ${N}${R}`,
+      (N === 1 ? `Multiply both sides by ${D}: ${R} = ${D}(${L} ${invSign} ${B})` : `Multiply both sides by ${D}: ${D}(${L} ${invSign} ${B}) = ${N}${R}`),
       ...step3
     ]
   };
@@ -521,7 +523,7 @@ function makeQ16_Cubic(){
   const w = [
     `x = ∛y + ${B}`,
     `x = (y + ${B})³`,
-    `x = ∛(y) + ${B}`,
+    `x = ∛y − ${B}`,
     `x = ∛(y − ${B})`
   ];
   const mcq = buildMCQOptions(correct, shuffleArray(w).slice(0,3));
@@ -619,7 +621,7 @@ function buildSqrtFractionInner(pool, prefix, skill, diff){
     `${hvar} = ${M}${dvar} / ${K}`,
     `${hvar} = ${K}${dvar}² / ${M}`,
     `${hvar} = ${M}${dvar}² + ${K}`,
-    `${hvar} = ${K}${dvar}²/${M}`
+    `${hvar} = ${M}${dvar}² − ${K}`
   ];
   const mcq = buildMCQOptions(correct, shuffleArray(w).slice(0,3));
   if(!mcq) return buildSqrtFractionInner(pool, prefix, skill, diff);
@@ -651,7 +653,7 @@ function coeffVar(numer, denom, varName){
   if(d === 1){
     if(n === 1) return varName;
     if(n === -1) return `−${varName}`;
-    return `${n}${varName}`;
+    return `${n < 0 ? '−' + Math.abs(n) : n}${varName}`;
   }
   const sign = n < 0 ? '−' : '';
   const absN = Math.abs(n);
@@ -815,6 +817,7 @@ function buildFractionCoeffOnly(pool, prefix, skill, diff){
   let m = randInt(2,9) * choice([1,-1]);
   let n = randInt(2,9) * choice([1,-1]);
   if(m < 0 && n < 0) { n = Math.abs(n); } // never both negative
+  if(gcd(m, n) !== 1) return buildFractionCoeffOnly(pool, prefix, skill, diff);
   const lhsCoeff = fracStr(m, n);
   const correct = `${A} = ${coeffVar(n, m, C)}`;
   const w = [
@@ -829,8 +832,8 @@ function buildFractionCoeffOnly(pool, prefix, skill, diff){
     question: `${lhsCoeff} ${A} = ${C}\n\nMake ${A} the subject of the formula.`,
     options: mcq.options, correctIndex: mcq.correctIndex,
     solution: [
-      `Multiply both sides by ${n}: ${m}${A} = ${n}${C}`,
-      `Divide both sides by ${m}: ${A} = ${coeffVar(n, m, C)}`
+      `Multiply both sides by ${String(n).replace('-', '−')}: ${coeffVar(m, 1, A)} = ${coeffVar(n, 1, C)}`,
+      `Divide both sides by ${String(m).replace('-', '−')}: ${A} = ${coeffVar(n, m, C)}`
     ]
   };
 }
@@ -938,6 +941,7 @@ function buildSubjectBothSides(varPool){
 function buildFactorisingRequired(pool){
   const [L, x] = choice(pool);
   const A = randInt(2,9), B = randInt(2,9);
+  if(A === B) return buildFactorisingRequired(pool);
   const correct = `${x} = ${L} / (${A} + ${B})`;
   const w = [
     `${x} = ${L} / (${A} − ${B})`,
@@ -1149,7 +1153,7 @@ function makeQ19(){ return buildSubjectDenominator(
 
 // Q20 — d = √(3h/2), make h the subject
 function makeQ20(){ return buildSqrtFractionInner(
-  [['d','h'],['p','q'],['k','m'],['w','n']], "Q20", "Rearranging — square root, three marks", "Higher"); }
+  [['d','h'],['p','q'],['k','m'],['w','n']], "Q20", "Rearranging — square root, subject in the numerator", "Higher"); }
 
 const FACTORY_REGISTRY = [
   { name:"Q1",  fn:makeQ1 },
